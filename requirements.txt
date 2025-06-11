@@ -1,0 +1,10 @@
+pandas
+networkx
+groq
+openpyxl
+python-dotenv
+ollama
+langchain
+langchain_community
+langchain.tools
+langchain-google-vertexai
