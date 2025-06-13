@@ -12,7 +12,8 @@ List of queries the agent can answer-:
 "Show the total unique groups count for 05-05-2025."
 "List all metrics recorded on 10-05-2025."
 
-3.) Region-specific queries - Average
+3.) Region/Area-specific queries - Average
+"Tell the total visitors for Chennai stores in May 2025." ->Answered
 "Give me metrics for Karnataka region" -> Barely able to answer
 "Compare total unique group count for Karnataka and Telangana." -> Request entity too large
 
