@@ -128,6 +128,10 @@ REGIONAL HIERARCHY:
     for _, row in weekly_area_metrics.iterrows():
         system_prompt += f"- {row['Area']} ({row['Year-Week']}): {row['Total In Count']:,} visitors, {row['Group Count']} groups, {row['Total Unique Groups']} unique groups\n"
     
+    system_prompt += "\nWEEKLY SITE PERFORMANCE:\n"
+    for _, row in weekly_site_metrics.iterrows():
+        system_prompt += f"- {row['Site Name']} ({row['Area']}, {row['Region']}) ({row['Year-Week']}): {row['Total In Count']:,} visitors, {row['Group Count']} groups, {row['Total Unique Groups']} unique groups\n"
+
     # === MONTHLY METRICS SUMMARY ===
     system_prompt += "\nMONTHLY REGIONAL PERFORMANCE:\n"
     for _, row in monthly_region_metrics.iterrows():
@@ -138,6 +142,13 @@ REGIONAL HIERARCHY:
     for _, row in monthly_area_metrics.iterrows():
         month_name = calendar.month_name[int(row['Year-Month'].split('-')[1])]
         system_prompt += f"- {row['Area']} ({month_name} 2025): {row['Total In Count']:,} visitors, {row['Group Count']} groups, {row['Total Unique Groups']} unique groups\n"
+    
+    system_prompt += "\nMONTHLY SITE PERFORMANCE:\n"
+    for _, row in monthly_site_metrics.iterrows():
+        site = row['Site Name']
+        month_name = calendar.month_name[int(row['Year-Month'].split('-')[1])]
+        system_prompt += f"- {site} ({row['Area']}, {row['Region']}) ({month_name} 2025): {row['Total In Count']:,} visitors, {row['Group Count']} groups, {row['Total Unique Groups']} unique groups\n"
+
     
     # === TOP PERFORMERS ===
     system_prompt += "\nTOP PERFORMING SITES (by total visitors):\n"
@@ -170,4 +181,3 @@ INSTRUCTIONS:
 """
     
     return system_prompt
-
