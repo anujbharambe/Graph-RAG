@@ -3,6 +3,7 @@ import networkx as nx
 from groq import Groq
 import os
 import dotenv
+from SystemPrompt import generate_system_prompt
 
 dotenv.load_dotenv()
 
@@ -61,26 +62,28 @@ def graph_to_text(graph):
 
 graph_text = graph_to_text(graph)
 
-# === Ask Groq API (Cloud Model) ===
+# Complex query detection removed - always using system prompt approach
+
+# === Ask Groq API with system prompt ===
 def ask_llm_with_graph_context(graph_text, user_question, model="compound-beta"):
+    # Always use system prompt approach
+    system_prompt = generate_system_prompt(df)
     prompt = f"""
-You are an intelligent assistant that answers user queries based on structured graph data.
+Based on the aggregated data provided in the system message, answer the following question:
+"{user_question}"
 
-The data given to you is the total visitors data for the brand US Polo across various stores across India for May 2025.
-
-Here are the known facts from the graph (relationships and values):
-
+Additional context from specific graph data:
 {graph_text}
 
-Now answer the following question using the information above:
-\"{user_question}\"
+Provide a comprehensive answer using both the aggregated metrics and specific details where relevant.
 """
+    
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
     response = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You reason over knowledge graphs to answer user questions."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
     )
@@ -88,17 +91,21 @@ Now answer the following question using the information above:
 
 # === Entry Point for Input Script ===
 def run_graphrag_agent(query: str):
-
+    # Always use system prompt approach with relevant subgraph data
+    
     import re
     # Find all site names mentioned in the graph that appear in query
     mentioned_sites = [n for n in graph.nodes if graph.nodes[n].get("type") == "Site" and n.lower() in query.lower()]
     
-    # Find all dates mentioned in query (e.g., 03-05-2025)
+    # Find all dates mentioned in query
     mentioned_dates = re.findall(r"\b\d{2}-\d{2}-\d{4}\b", query)
 
     # Find all regions mentioned in query
     mentioned_regions = [n for n in graph.nodes if graph.nodes[n].get("type") == "Region" and n.lower() in query.lower()]
     
+    # Find all areas mentioned in query
+    mentioned_areas = [n for n in graph.nodes if graph.nodes[n].get("type") == "Area" and n.lower() in query.lower()]
+
     nodes_to_include = set()
     
     # Build combinations of site + date subgraphs
@@ -144,13 +151,29 @@ def run_graphrag_agent(query: str):
                             nodes_to_include |= {site, node, region}
                             nodes_to_include |= set(graph.successors(node))
                             nodes_to_include |= set(graph.predecessors(node))
-
-    # Fallback if nothing matched
-    if not nodes_to_include:
-        subgraph = graph.subgraph(list(graph.nodes)[:30])
-    else:
-        subgraph = graph.subgraph(nodes_to_include)
     
-    graph_text = graph_to_text(subgraph)
-    return ask_llm_with_graph_context(graph_text, query)
+    elif mentioned_areas:
+        for area in mentioned_areas:
+            for u, v, data in graph.edges(data=True):
+                if data.get("relation") == "located_in_area" and v == area:
+                    site = u
+                    for node in graph.nodes:
+                        if node.startswith(f"{site}_") and graph.nodes[node].get("type") == "DailyMetrics":
+                            nodes_to_include |= {site, node, area}
+                            nodes_to_include |= set(graph.successors(node))
+                            nodes_to_include |= set(graph.predecessors(node))
 
+    # If nothing specific was mentioned or for general queries, use a limited sample
+    if not nodes_to_include:
+        # Use a small sample of sites to avoid token limits
+        sample_sites = list([n for n in graph.nodes if graph.nodes[n].get("type") == "Site"])[:5]
+        subgraph_text = f"Sample sites available: {', '.join(sample_sites)}"
+    else:
+        # Limit subgraph size to avoid token issues
+        if len(nodes_to_include) > 50:
+            nodes_to_include = set(list(nodes_to_include)[:50])
+        
+        subgraph = graph.subgraph(nodes_to_include)
+        subgraph_text = graph_to_text(subgraph)
+    
+    return ask_llm_with_graph_context(subgraph_text, query)
