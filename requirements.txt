@@ -8,3 +8,9 @@ langchain
 langchain_community
 langchain.tools
 langchain-google-vertexai
+chromadb
+google-generativeai
+langchain_google_genai
+langchain_chroma
+sentence-transformers
+langchain_core
