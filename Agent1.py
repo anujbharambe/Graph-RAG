@@ -4,7 +4,10 @@ from groq import Groq
 import os
 import dotenv
 from SystemPrompt import generate_system_prompt
+from langchain_core.messages import HumanMessage, AIMessage
 
+conversation_history = []  # Stores all messages
+# Load environment variables
 dotenv.load_dotenv()
 
 # === Load Data ===
@@ -65,8 +68,9 @@ graph_text = graph_to_text(graph)
 # Complex query detection removed - always using system prompt approach
 
 # === Ask Groq API with system prompt ===
-def ask_llm_with_graph_context(graph_text, user_question, model="compound-beta"):
-    # Always use system prompt approach
+def ask_llm_with_graph_context(graph_text, user_question, model="llama-3.3-70b-versatile"):
+    from SystemPrompt import generate_system_prompt
+
     system_prompt = generate_system_prompt(df)
     prompt = f"""
 Based on the aggregated data provided in the system message, answer the following question:
@@ -75,19 +79,43 @@ Based on the aggregated data provided in the system message, answer the followin
 Additional context from specific graph data:
 {graph_text}
 
-Provide a comprehensive answer using both the aggregated metrics and specific details where relevant.
+Provide a comprehensive answer to the user. 
+Use the system prompt to answer questions that require weekly, monthly or yearly data. 
+Use this prompt to answer queries related to finding the average or total of any data.
+Also refer to this prompt for any general queries made by the user.
+If the question only requires specific data, then you can use the above graph data directly.
 """
-    
+
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+    # Append previous conversation messages
+    messages = [
+        {"role": "system", "content": system_prompt},
+    ] + [
+        {"role": "user", "content": m.content} if isinstance(m, HumanMessage) else {"role": "assistant", "content": m.content}
+        for m in conversation_history
+    ] + [
+        {"role": "user", "content": prompt}
+    ]
 
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
+        messages=messages
     )
-    return response.choices[0].message.content
+
+    reply = response.choices[0].message.content
+
+    # Append to conversation history
+    conversation_history.append(HumanMessage(content=prompt))
+    conversation_history.append(AIMessage(content=reply))
+
+    # Write to log file
+    with open("logging.txt", "a", encoding="utf-8") as f:
+        f.write("User: " + prompt.strip() + "\n")
+        f.write("AI: " + reply.strip() + "\n\n")
+
+    return reply
+
 
 # === Entry Point for Input Script ===
 def run_graphrag_agent(query: str):
@@ -165,14 +193,10 @@ def run_graphrag_agent(query: str):
 
     # If nothing specific was mentioned or for general queries, use a limited sample
     if not nodes_to_include:
-        # Use a small sample of sites to avoid token limits
-        sample_sites = list([n for n in graph.nodes if graph.nodes[n].get("type") == "Site"])[:5]
-        subgraph_text = f"Sample sites available: {', '.join(sample_sites)}"
+    # For generic or average-based queries, avoid subgraph; rely only on full system prompt
+        subgraph_text = "No specific subgraph needed for this query. Use aggregated metrics in system prompt to compute the answer."
+
     else:
-        # Limit subgraph size to avoid token issues
-        if len(nodes_to_include) > 50:
-            nodes_to_include = set(list(nodes_to_include)[:50])
-        
         subgraph = graph.subgraph(nodes_to_include)
         subgraph_text = graph_to_text(subgraph)
     
